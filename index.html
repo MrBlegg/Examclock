@@ -18,6 +18,7 @@
   --on-band: #ffffff;
   --line: #c5cede;
   --field: #ffffff;
+  --second: #c62828;
   --font: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, "DejaVu Sans", sans-serif;
   --fit: 1;
   --fit-head: 1;
@@ -31,6 +32,7 @@
   --on-band: #10201c;
   --line: #3d5049;
   --field: #182d27;
+  --second: #ff9e80;
   color-scheme: dark;
 }
 
@@ -175,6 +177,50 @@ body.idle { cursor: none; }
   .now-label { font-size: calc(5vw * var(--fit)); }
 }
 
+/* Analogue clock face */
+.dial { display: none; }
+body.analogue .now-label, body.analogue .clock { display: none; }
+body.analogue .now { align-items: center; padding: 1vh 2vw; }
+body.analogue .dial { display: block; width: 100%; height: 100%; min-height: 0; }
+.dial-rim { fill: var(--page); stroke: var(--ink); stroke-width: 16; }
+.dial-tick { stroke: var(--ink); stroke-width: 5; }
+.dial-tick.major { stroke-width: 14; }
+.dial-number { fill: var(--ink); font-family: var(--font); font-size: 100px; font-weight: 800; text-anchor: middle; }
+.dial-label { fill: var(--muted); font-family: var(--font); font-size: 42px; font-weight: 700; text-anchor: middle; }
+.dial-hand { stroke: var(--ink); stroke-linecap: round; }
+.dial-hand.hour { stroke-width: 32; }
+.dial-hand.minute { stroke-width: 20; }
+.dial-hand.second { stroke: var(--second); stroke-width: 7; }
+.dial-cap { fill: var(--ink); }
+.dial-pin { fill: var(--second); }
+
+/* Landscape: headings and finish times on the left, the clock face filling the right */
+@media (min-aspect-ratio: 1001/1000) {
+  body.analogue .stage {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  body.analogue .headings { grid-column: 1; grid-row: 1; }
+  body.analogue .band { grid-column: 1; grid-row: 3; grid-template-columns: minmax(0, 1fr); }
+  body.analogue .now { grid-column: 2; grid-row: 1 / -1; width: calc(min(96vh, 54vw) + 4vw); }
+  body.analogue .headings h1 { font-size: calc(min(3.8vw, 8vh) * var(--fit-head)); }
+  body.analogue .headings p { font-size: calc(min(2.5vw, 4.8vh) * var(--fit-head)); }
+  body.analogue .band[data-count] .finish {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2vw;
+    padding: 1.6vh 2.5vw 1.6vh 4vw;
+  }
+  body.analogue .finish + .finish {
+    border-left: 0;
+    border-top: 2px solid color-mix(in srgb, var(--on-band) 45%, transparent);
+  }
+  body.analogue .band[data-count] .finish-label { font-size: calc(min(2.4vw, 4.6vh) * var(--fit)); }
+  body.analogue .band[data-count] .finish-time { font-size: calc(min(5.4vw, 10vh) * var(--fit)); }
+  body.analogue .band[data-count="1"] .finish-time { font-size: calc(min(6vw, 13vh) * var(--fit)); }
+}
+
 /* Controls: visible on mouse movement or touch, hidden while the display is in use */
 .controls {
   position: fixed;
@@ -281,6 +327,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
   <section class="now" aria-label="Current time">
     <p class="now-label" id="showClockLabel"></p>
     <div class="clock" id="clock"><span id="hhmm"></span><span class="seconds" id="ss"></span></div>
+    <svg class="dial" id="dial" viewBox="0 0 1000 1000" role="img" aria-label="Analogue clock"></svg>
   </section>
 
   <section class="band" id="band" aria-label="Finish times"></section>
@@ -339,6 +386,13 @@ legend { padding: 0 0 6px; font-weight: 500; }
 
   <div class="group">
     <h3>Appearance</h3>
+    <fieldset>
+      <legend>Clock style</legend>
+      <div class="choices">
+        <label class="choice" for="styleDigital"><input id="styleDigital" type="radio" name="clockStyle" value="digital"> Digital</label>
+        <label class="choice" for="styleAnalogue"><input id="styleAnalogue" type="radio" name="clockStyle" value="analogue"> Analogue</label>
+      </div>
+    </fieldset>
     <label class="check" for="showSeconds">
       <input id="showSeconds" type="checkbox"> Show seconds
     </label>
@@ -364,6 +418,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
     clockLabel: "Current time",
     showSeconds: true,
     display: "light",
+    clockStyle: "digital",
     duration: 90,
     rows: [{ label: "Finish Time", time: "10:30" }]
   };
@@ -385,6 +440,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
         });
         if (typeof saved.showSeconds === "boolean") state.showSeconds = saved.showSeconds;
         if (saved.display === "dark" || saved.display === "light") state.display = saved.display;
+        if (saved.clockStyle === "analogue") state.clockStyle = "analogue";
         state.duration = Number.isInteger(saved.duration) && saved.duration > 0 ? saved.duration : null;
         if (Array.isArray(saved.rows) && saved.rows.length) {
           state.rows = saved.rows.slice(0, MAX_ROWS).map(function (row, index) {
@@ -413,6 +469,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
         clockLabel: state.clockLabel,
         showSeconds: state.showSeconds,
         display: state.display,
+        clockStyle: state.clockStyle,
         duration: state.duration,
         rows: state.rows.map(function (row) {
           return { label: row.label, time: row.time, calc: !!row.calc, pct: row.pct, autoLabel: !!row.autoLabel };
@@ -444,8 +501,65 @@ legend { padding: 0 0 6px; font-weight: 500; }
     return pad(hours) + ":" + pad(minutes);
   }
 
+  /* Analogue face: drawn once, then only the hands are turned */
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  var hands = {};
+
+  function svgEl(name, attrs, parent) {
+    var el = document.createElementNS(SVG_NS, name);
+    Object.keys(attrs).forEach(function (key) { el.setAttribute(key, attrs[key]); });
+    parent.appendChild(el);
+    return el;
+  }
+
+  function buildDial() {
+    var dial = $("dial");
+    svgEl("circle", { "class": "dial-rim", cx: 500, cy: 500, r: 488 }, dial);
+    for (var i = 0; i < 60; i++) {
+      var major = i % 5 === 0;
+      svgEl("line", {
+        "class": major ? "dial-tick major" : "dial-tick",
+        x1: 500, x2: 500, y1: 30, y2: major ? 80 : 56,
+        transform: "rotate(" + i * 6 + " 500 500)"
+      }, dial);
+    }
+    for (var hour = 1; hour <= 12; hour++) {
+      var angle = hour * Math.PI / 6;
+      var number = svgEl("text", {
+        "class": "dial-number",
+        x: (500 + 345 * Math.sin(angle)).toFixed(1),
+        y: (500 - 345 * Math.cos(angle) + 36).toFixed(1)
+      }, dial);
+      number.textContent = hour;
+    }
+    hands.label = svgEl("text", { "class": "dial-label", x: 500, y: 670 }, dial);
+    hands.hour = svgEl("line", { "class": "dial-hand hour", x1: 500, x2: 500, y1: 545, y2: 265 }, dial);
+    hands.minute = svgEl("line", { "class": "dial-hand minute", x1: 500, x2: 500, y1: 560, y2: 110 }, dial);
+    hands.second = svgEl("line", { "class": "dial-hand second", x1: 500, x2: 500, y1: 600, y2: 75 }, dial);
+    svgEl("circle", { "class": "dial-cap", cx: 500, cy: 500, r: 34 }, dial);
+    svgEl("circle", { "class": "dial-pin", cx: 500, cy: 500, r: 13 }, dial);
+  }
+
+  function setDial(now) {
+    var seconds = now.getSeconds();
+    var minutes = now.getMinutes() + seconds / 60;
+    var hours = (now.getHours() % 12) + minutes / 60;
+    hands.hour.setAttribute("transform", "rotate(" + hours * 30 + " 500 500)");
+    hands.minute.setAttribute("transform", "rotate(" + minutes * 6 + " 500 500)");
+    hands.second.setAttribute("transform", "rotate(" + seconds * 6 + " 500 500)");
+    $("dial").setAttribute("aria-label", "Analogue clock showing " + pad(now.getHours()) + ":" + pad(now.getMinutes()));
+  }
+
+  function sizeDialLabel() {
+    hands.label.style.fontSize = "";
+    if (state.clockStyle !== "analogue" || !state.clockLabel.trim()) return;
+    var width = hands.label.getComputedTextLength();
+    if (width > 420) hands.label.style.fontSize = Math.max(20, 42 * 420 / width) + "px";
+  }
+
   function tick() {
     var now = new Date();
+    setDial(now);
     setDigits($("hhmm"), pad(now.getHours()) + ":" + pad(now.getMinutes()));
     setDigits($("ss"), pad(now.getSeconds()));
     setTimeout(tick, 1000 - now.getMilliseconds() + 5);
@@ -461,8 +575,13 @@ legend { padding: 0 0 6px; font-weight: 500; }
     var root = document.documentElement.style;
     var stage = $("stage");
     var now = document.querySelector(".now");
+    sizeDialLabel();
     function overflowing() {
       var used = document.querySelector(".headings").offsetHeight + $("band").offsetHeight;
+      if (state.clockStyle === "analogue") {
+        var sideBySide = window.matchMedia("(min-aspect-ratio: 1001/1000)").matches;
+        return used + (sideBySide ? 0 : stage.clientWidth * 0.6) > stage.clientHeight;
+      }
       var nowHeight = $("clock").offsetHeight + 12;
       if (!$("showClockLabel").hidden) nowHeight += $("showClockLabel").offsetHeight;
       return used + nowHeight > stage.clientHeight || now.scrollWidth > now.clientWidth + 1;
@@ -486,6 +605,9 @@ legend { padding: 0 0 6px; font-weight: 500; }
     setText($("showSubheading"), state.subheading);
     setText($("showClockLabel"), state.clockLabel);
     $("clock").classList.toggle("no-seconds", !state.showSeconds);
+    document.body.classList.toggle("analogue", state.clockStyle === "analogue");
+    hands.label.textContent = state.clockLabel;
+    hands.second.style.display = state.showSeconds ? "" : "none";
 
     var band = $("band");
     band.textContent = "";
@@ -647,6 +769,12 @@ legend { padding: 0 0 6px; font-weight: 500; }
     changed();
   });
 
+  $("styleDigital").checked = state.clockStyle === "digital";
+  $("styleAnalogue").checked = state.clockStyle === "analogue";
+  document.querySelectorAll('input[name="clockStyle"]').forEach(function (radio) {
+    radio.addEventListener("change", function (e) { state.clockStyle = e.target.value; changed(); });
+  });
+
   $("displayLight").checked = state.display === "light";
   $("displayDark").checked = state.display === "dark";
   document.querySelectorAll('input[name="display"]').forEach(function (radio) {
@@ -768,6 +896,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
   window.addEventListener("resize", fit);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
 
+  buildDial();
   buildRowEditors();
   recalc();
   tick();
