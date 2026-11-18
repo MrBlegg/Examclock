@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en-GB" data-display="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exam Hall Clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: read from the back of the hall. Headings, then one very large clock,
+   then a full-width band that holds the finish time. Nothing moves except the digits. */
+:root {
+  --page: #ffffff;
+  --ink: #0a1f44;
+  --muted: #3f4f6b;
+  --band: #0a3a8a;
+  --on-band: #ffffff;
+  --line: #c5cede;
+  --field: #ffffff;
+  --font: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, "DejaVu Sans", sans-serif;
+  --fit: 1;
+  --fit-head: 1;
+  color-scheme: light;
+}
+:root[data-display="dark"] {
+  --page: #10201c;
+  --ink: #f4f7ef;
+  --muted: #bccabf;
+  --band: #f4f7ef;
+  --on-band: #10201c;
+  --line: #3d5049;
+  --field: #182d27;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  overflow: hidden;
+}
+body.idle { cursor: none; }
+
+/* Display */
+.stage {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+.headings {
+  padding: min(3.5vh, 3vw) 4vw 0;
+  display: grid;
+  gap: .6vh;
+  padding-right: 4vw;
+}
+.headings h1, .headings p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.headings h1 {
+  font-size: calc(min(5.6vw, 10vh) * var(--fit-head));
+  font-weight: 800;
+  line-height: 1.08;
+}
+.headings p {
+  font-size: calc(min(3.3vw, 5.8vh) * var(--fit-head));
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--muted);
+}
+
+.now {
+  min-height: 0;
+  padding: 0 4vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1vh;
+}
+.now-label {
+  margin: 0;
+  font-size: calc(min(2.7vw, 4.6vh) * var(--fit));
+  font-weight: 700;
+  color: var(--muted);
+}
+.clock {
+  --clock-size: min(25vw, 41vh);
+  font-size: calc(var(--clock-size) * var(--fit));
+  font-weight: 800;
+  line-height: .95;
+  display: flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+.clock.no-seconds { --clock-size: min(30.5vw, 41vh); }
+.clock.no-seconds .seconds { display: none; }
+.seconds {
+  font-size: .42em;
+  font-weight: 700;
+  color: var(--muted);
+  margin-left: .28em;
+}
+
+/* Fixed-width digit cells stop the time shifting sideways as it changes */
+.digit { display: inline-block; width: .64em; text-align: center; }
+.colon { display: inline-block; width: .34em; text-align: center; }
+
+.band {
+  background: var(--band);
+  color: var(--on-band);
+  display: grid;
+  grid-template-columns: repeat(var(--rows, 1), minmax(0, 1fr));
+}
+.finish {
+  min-width: 0;
+  padding: min(2.6vh, 2vw) 4vw;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 3vw;
+}
+.finish + .finish { border-left: .3vw solid color-mix(in srgb, var(--on-band) 45%, transparent); }
+.finish-label {
+  min-width: 0;
+  font-size: calc(min(4.4vw, 7.6vh) * var(--fit));
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.finish-time {
+  flex: none;
+  font-size: calc(min(11vw, 19vh) * var(--fit));
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+.band[data-count="2"] .finish,
+.band[data-count="3"] .finish,
+.band[data-count="4"] .finish {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: .4vh;
+  padding-inline: 2.5vw;
+}
+.band[data-count] .finish:first-child { padding-left: 4vw; }
+.band[data-count="2"] .finish-label { font-size: calc(min(3vw, 5.2vh) * var(--fit)); }
+.band[data-count="2"] .finish-time { font-size: calc(min(9vw, 15vh) * var(--fit)); }
+.band[data-count="3"] .finish-label { font-size: calc(min(2.3vw, 4.4vh) * var(--fit)); }
+.band[data-count="3"] .finish-time { font-size: calc(min(6.8vw, 13vh) * var(--fit)); }
+.band[data-count="4"] .finish-label { font-size: calc(min(1.9vw, 3.8vh) * var(--fit)); }
+.band[data-count="4"] .finish-time { font-size: calc(min(5.2vw, 11vh) * var(--fit)); }
+
+/* Portrait screens and phones */
+@media (max-aspect-ratio: 1/1) {
+  .band { grid-template-columns: minmax(0, 1fr); }
+  .band[data-count] .finish {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 1.2vh 4vw;
+  }
+  .finish + .finish {
+    border-left: 0;
+    border-top: 2px solid color-mix(in srgb, var(--on-band) 45%, transparent);
+  }
+  .band[data-count] .finish-label { font-size: calc(5.4vw * var(--fit)); }
+  .band[data-count] .finish-time { font-size: calc(13vw * var(--fit)); }
+  .headings h1 { font-size: calc(9vw * var(--fit-head)); }
+  .headings p { font-size: calc(5.6vw * var(--fit-head)); }
+  .now-label { font-size: calc(5vw * var(--fit)); }
+}
+
+/* Controls: visible on mouse movement or touch, hidden while the display is in use */
+.controls {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+body.idle .controls:not(:focus-within) { opacity: 0; pointer-events: none; }
+button {
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 2px solid var(--ink);
+  background: var(--page);
+  color: var(--ink);
+  cursor: pointer;
+}
+button:hover { background: var(--ink); color: var(--page); }
+button:focus-visible, input:focus-visible {
+  outline: 3px solid #e08a00;
+  outline-offset: 2px;
+}
+.notice {
+  position: fixed;
+  top: 68px;
+  right: 12px;
+  max-width: min(360px, calc(100vw - 24px));
+  margin: 0;
+  padding: 10px 14px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  background: var(--page);
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+/* Edit panel */
+.panel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(420px, 100%);
+  padding: 20px;
+  background: var(--page);
+  border-left: 2px solid var(--ink);
+  overflow-y: auto;
+  display: grid;
+  gap: 22px;
+  align-content: start;
+  font-size: 16px;
+}
+.panel[hidden] { display: none; }
+.panel-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.panel h2 { margin: 0; font-size: 24px; font-weight: 800; }
+.panel h3 { margin: 0; font-size: 18px; font-weight: 800; }
+.group { display: grid; gap: 14px; }
+.field { display: grid; gap: 5px; font-weight: 500; }
+.field input {
+  font: inherit;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--ink);
+}
+.row-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--line);
+}
+.row-hint { grid-column: 1 / -1; margin: 0; font-weight: 700; }
+.row-hint[hidden] { display: none; }
+.field input[aria-invalid="true"] { border-color: #c62828; }
+.row-edit button { grid-column: 1 / -1; justify-self: start; min-height: 40px; border-width: 1px; font-weight: 500; }
+.check, .choice { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.check input, .choice input { width: 22px; height: 22px; margin: 0; accent-color: var(--ink); }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+legend { padding: 0 0 6px; font-weight: 500; }
+.choices { display: flex; gap: 22px; }
+</style>
+</head>
+<body>
+
+<main class="stage" id="stage">
+  <header class="headings">
+    <h1 id="showHeading"></h1>
+    <p id="showSubheading"></p>
+  </header>
+
+  <section class="now" aria-label="Current time">
+    <p class="now-label" id="showClockLabel"></p>
+    <div class="clock" id="clock"><span id="hhmm"></span><span class="seconds" id="ss"></span></div>
+  </section>
+
+  <section class="band" id="band" aria-label="Finish times"></section>
+</main>
+
+<div class="controls" id="controls">
+  <button type="button" id="fullscreenBtn">Full screen</button>
+  <button type="button" id="editBtn">Edit display</button>
+</div>
+<p class="notice" id="notice" role="status" hidden></p>
+
+<aside class="panel" id="panel" aria-label="Edit display" hidden>
+  <div class="panel-top">
+    <h2>Edit display</h2>
+    <button type="button" id="doneBtn">Done</button>
+  </div>
+
+  <div class="group">
+    <h3>Headings</h3>
+    <label class="field" for="heading">Main heading
+      <input id="heading" type="text" autocomplete="off">
+    </label>
+    <label class="field" for="subheading">Subheading
+      <input id="subheading" type="text" autocomplete="off">
+    </label>
+    <label class="field" for="clockLabel">Clock heading
+      <input id="clockLabel" type="text" autocomplete="off">
+    </label>
+  </div>
+
+  <div class="group">
+    <h3>Finish times</h3>
+    <div class="group" id="rowEditors"></div>
+    <button type="button" id="addRowBtn">Add another finish time</button>
+  </div>
+
+  <div class="group">
+    <h3>Appearance</h3>
+    <label class="check" for="showSeconds">
+      <input id="showSeconds" type="checkbox"> Show seconds
+    </label>
+    <fieldset>
+      <legend>Colours</legend>
+      <div class="choices">
+        <label class="choice" for="displayLight"><input id="displayLight" type="radio" name="display" value="light"> Light</label>
+        <label class="choice" for="displayDark"><input id="displayDark" type="radio" name="display" value="dark"> Dark</label>
+      </div>
+    </fieldset>
+  </div>
+</aside>
+
+<script>
+(function () {
+  var STORE_KEY = "exam-hall-clock-v1";
+  var MAX_ROWS = 4;
+  var nextId = 1;
+
+  var defaults = {
+    heading: "A Level Computer Science",
+    subheading: "November Mock Year 1",
+    clockLabel: "Current time",
+    showSeconds: true,
+    display: "light",
+    rows: [{ label: "Finish time", time: "10:30" }]
+  };
+
+  function $(id) { return document.getElementById(id); }
+
+  function load() {
+    var state = JSON.parse(JSON.stringify(defaults));
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORE_KEY));
+      if (saved && typeof saved === "object") {
+        ["heading", "subheading", "clockLabel"].forEach(function (key) {
+          if (typeof saved[key] === "string") state[key] = saved[key];
+        });
+        if (typeof saved.showSeconds === "boolean") state.showSeconds = saved.showSeconds;
+        if (saved.display === "dark" || saved.display === "light") state.display = saved.display;
+        if (Array.isArray(saved.rows) && saved.rows.length) {
+          state.rows = saved.rows.slice(0, MAX_ROWS).map(function (row) {
+            return { label: String(row.label || ""), time: String(row.time || "") };
+          });
+        }
+      }
+    } catch (err) { /* Storage is unavailable: use the defaults */ }
+    state.rows.forEach(function (row) { row.id = nextId++; });
+    return state;
+  }
+
+  var state = load();
+
+  function save() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        heading: state.heading,
+        subheading: state.subheading,
+        clockLabel: state.clockLabel,
+        showSeconds: state.showSeconds,
+        display: state.display,
+        rows: state.rows.map(function (row) { return { label: row.label, time: row.time }; })
+      }));
+    } catch (err) { /* The display still works without saving */ }
+  }
+
+  function setDigits(el, text) {
+    if (el.dataset.value === text) return;
+    el.dataset.value = text;
+    el.textContent = "";
+    text.split("").forEach(function (ch) {
+      var cell = document.createElement("span");
+      cell.className = ch === ":" ? "colon" : "digit";
+      cell.textContent = ch;
+      el.appendChild(cell);
+    });
+  }
+
+  function pad(n) { return String(n).padStart(2, "0"); }
+
+  /* Accepts 14:30, 14.30, 1430 or 930 and returns HH:MM, or an empty string */
+  function parseTime(text) {
+    var match = text.trim().match(/^(\d{1,2})[:.]?(\d{2})$/);
+    if (!match) return "";
+    var hours = Number(match[1]), minutes = Number(match[2]);
+    if (hours > 23 || minutes > 59) return "";
+    return pad(hours) + ":" + pad(minutes);
+  }
+
+  function tick() {
+    var now = new Date();
+    setDigits($("hhmm"), pad(now.getHours()) + ":" + pad(now.getMinutes()));
+    setDigits($("ss"), pad(now.getSeconds()));
+    setTimeout(tick, 1000 - now.getMilliseconds() + 5);
+  }
+
+  function setText(el, text) {
+    el.textContent = text;
+    el.hidden = !text.trim();
+  }
+
+  function fit() {
+    /* Long headings shrink first, then the whole display if it still does not fit */
+    var root = document.documentElement.style;
+    var stage = $("stage");
+    var now = document.querySelector(".now");
+    function overflowing() {
+      var used = document.querySelector(".headings").offsetHeight + $("band").offsetHeight;
+      var nowHeight = $("clock").offsetHeight + 12;
+      if (!$("showClockLabel").hidden) nowHeight += $("showClockLabel").offsetHeight;
+      return used + nowHeight > stage.clientHeight || now.scrollWidth > now.clientWidth + 1;
+    }
+    var head = 1, all = 1;
+    root.setProperty("--fit-head", head);
+    root.setProperty("--fit", all);
+    while (overflowing() && head > 0.5) {
+      head = Math.round((head - 0.05) * 100) / 100;
+      root.setProperty("--fit-head", head);
+    }
+    while (overflowing() && all > 0.3) {
+      all = Math.round((all - 0.04) * 100) / 100;
+      root.setProperty("--fit", all);
+    }
+  }
+
+  function render() {
+    document.documentElement.dataset.display = state.display;
+    setText($("showHeading"), state.heading);
+    setText($("showSubheading"), state.subheading);
+    setText($("showClockLabel"), state.clockLabel);
+    $("clock").classList.toggle("no-seconds", !state.showSeconds);
+
+    var band = $("band");
+    band.textContent = "";
+    band.dataset.count = state.rows.length;
+    band.style.setProperty("--rows", state.rows.length);
+    state.rows.forEach(function (row) {
+      var item = document.createElement("div");
+      item.className = "finish";
+      var label = document.createElement("span");
+      label.className = "finish-label";
+      label.textContent = row.label;
+      var time = document.createElement("span");
+      time.className = "finish-time";
+      setDigits(time, /^\d\d:\d\d$/.test(row.time) ? row.time : "--:--");
+      item.appendChild(label);
+      item.appendChild(time);
+      band.appendChild(item);
+    });
+    fit();
+  }
+
+  function changed() { save(); render(); }
+
+  function buildRowEditors() {
+    var holder = $("rowEditors");
+    holder.textContent = "";
+    state.rows.forEach(function (row, index) {
+      var wrap = document.createElement("div");
+      wrap.className = "row-edit";
+
+      var labelField = document.createElement("label");
+      labelField.className = "field";
+      labelField.htmlFor = "rowLabel" + row.id;
+      labelField.textContent = "Heading";
+      var labelInput = document.createElement("input");
+      labelInput.id = "rowLabel" + row.id;
+      labelInput.type = "text";
+      labelInput.autocomplete = "off";
+      labelInput.value = row.label;
+      labelInput.addEventListener("input", function () { row.label = labelInput.value; changed(); });
+      labelField.appendChild(labelInput);
+
+      var timeField = document.createElement("label");
+      timeField.className = "field";
+      timeField.htmlFor = "rowTime" + row.id;
+      timeField.textContent = "Time";
+      var timeInput = document.createElement("input");
+      timeInput.id = "rowTime" + row.id;
+      timeInput.type = "text";
+      timeInput.inputMode = "numeric";
+      timeInput.autocomplete = "off";
+      timeInput.maxLength = 5;
+      timeInput.placeholder = "14:30";
+      timeInput.value = row.time;
+      timeField.appendChild(timeInput);
+
+      var hint = document.createElement("p");
+      hint.className = "row-hint";
+      hint.id = "rowHint" + row.id;
+      hint.textContent = "Enter a 24-hour time, such as 14:30.";
+      hint.hidden = true;
+      timeInput.setAttribute("aria-describedby", hint.id);
+
+      timeInput.addEventListener("input", function () { row.time = parseTime(timeInput.value); changed(); });
+      timeInput.addEventListener("blur", function () {
+        if (row.time) timeInput.value = row.time;
+        var bad = !row.time;
+        hint.hidden = !bad;
+        timeInput.setAttribute("aria-invalid", bad ? "true" : "false");
+      });
+
+      wrap.appendChild(labelField);
+      wrap.appendChild(timeField);
+      wrap.appendChild(hint);
+
+      if (state.rows.length > 1) {
+        var remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Remove finish time " + (index + 1);
+        remove.addEventListener("click", function () {
+          state.rows.splice(index, 1);
+          buildRowEditors();
+          changed();
+          $("addRowBtn").focus();
+        });
+        wrap.appendChild(remove);
+      }
+      holder.appendChild(wrap);
+    });
+    $("addRowBtn").hidden = state.rows.length >= MAX_ROWS;
+  }
+
+  function bindText(id, key) {
+    var input = $(id);
+    input.value = state[key];
+    input.addEventListener("input", function () { state[key] = input.value; changed(); });
+  }
+  bindText("heading", "heading");
+  bindText("subheading", "subheading");
+  bindText("clockLabel", "clockLabel");
+
+  $("showSeconds").checked = state.showSeconds;
+  $("showSeconds").addEventListener("change", function (e) {
+    state.showSeconds = e.target.checked;
+    changed();
+  });
+
+  $("displayLight").checked = state.display === "light";
+  $("displayDark").checked = state.display === "dark";
+  document.querySelectorAll('input[name="display"]').forEach(function (radio) {
+    radio.addEventListener("change", function (e) { state.display = e.target.value; changed(); });
+  });
+
+  $("addRowBtn").addEventListener("click", function () {
+    if (state.rows.length >= MAX_ROWS) return;
+    var last = state.rows[state.rows.length - 1];
+    state.rows.push({ id: nextId++, label: "Extra time finish", time: last ? last.time : "" });
+    buildRowEditors();
+    changed();
+    var inputs = $("rowEditors").querySelectorAll('input[type="text"]');
+    inputs[inputs.length - 1].focus();
+    inputs[inputs.length - 1].select();
+  });
+
+  /* Edit panel */
+  function openPanel() {
+    $("panel").hidden = false;
+    $("controls").hidden = true;
+    $("heading").focus();
+    wake();
+  }
+  function closePanel() {
+    $("panel").hidden = true;
+    $("controls").hidden = false;
+    $("editBtn").focus();
+    wake();
+  }
+  $("editBtn").addEventListener("click", openPanel);
+  $("doneBtn").addEventListener("click", closePanel);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !$("panel").hidden) closePanel();
+  });
+
+  /* Hide the buttons and pointer when nobody is using them */
+  var idleTimer;
+  function wake() {
+    document.body.classList.remove("idle");
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () {
+      if ($("panel").hidden) document.body.classList.add("idle");
+    }, 4000);
+  }
+  ["pointermove", "pointerdown", "keydown"].forEach(function (name) {
+    document.addEventListener(name, wake, { passive: true });
+  });
+
+  /* Full screen */
+  var noticeTimer;
+  function showNotice(text) {
+    var notice = $("notice");
+    notice.textContent = text;
+    notice.hidden = false;
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(function () { notice.hidden = true; }, 7000);
+  }
+  function updateFullscreenLabel() {
+    $("fullscreenBtn").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen";
+    setTimeout(fit, 150);
+  }
+  document.addEventListener("fullscreenchange", updateFullscreenLabel);
+  $("fullscreenBtn").addEventListener("click", function () {
+    var blocked = "Full screen is blocked in this view. Press F11, or open the page in its own browser tab.";
+    try {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(function () { showNotice(blocked); });
+      } else {
+        showNotice(blocked);
+      }
+    } catch (err) { showNotice(blocked); }
+  });
+
+  /* Ask the screen to stay on where the browser allows it */
+  function keepScreenOn() {
+    try {
+      if (navigator.wakeLock && document.visibilityState === "visible") {
+        navigator.wakeLock.request("screen").catch(function () {});
+      }
+    } catch (err) { /* Not available in this browser */ }
+  }
+  document.addEventListener("visibilitychange", keepScreenOn);
+  document.addEventListener("pointerdown", keepScreenOn, { once: true });
+
+  window.addEventListener("resize", fit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+
+  buildRowEditors();
+  tick();
+  render();
+  wake();
+})();
+</script>
+</body>
+</html>
