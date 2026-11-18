@@ -411,7 +411,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
         <input id="startLabel" type="text" autocomplete="off">
       </label>
       <label class="field" for="startTime">Start time
-        <input id="startTime" type="text" inputmode="numeric" maxlength="5" placeholder="09:00" autocomplete="off">
+        <input id="startTime" type="text" inputmode="numeric" maxlength="5" placeholder="--:--" autocomplete="off">
       </label>
       <p class="row-hint" id="startHint" hidden>Enter a 24-hour time, such as 09:00.</p>
       <button type="button" class="start-action" id="startNowBtn">Start exam now</button>
@@ -822,7 +822,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
         wrap.appendChild(makeField("rowTime" + row.id, "Time", timeInput));
         timeInput.inputMode = "numeric";
         timeInput.maxLength = 5;
-        timeInput.placeholder = "14:30";
+        timeInput.placeholder = "--:--";
         timeInput.value = row.time;
 
         var hint = document.createElement("p");
