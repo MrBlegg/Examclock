@@ -76,6 +76,18 @@ body.idle { cursor: none; }
   color: var(--muted);
 }
 
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4vh 3.5vw;
+  font-size: calc(min(2.4vw, 4.2vh) * var(--fit-head));
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.meta[hidden] { display: none; }
+
 .now {
   min-height: 0;
   padding: 0 4vw;
@@ -143,7 +155,8 @@ body.idle { cursor: none; }
 }
 .band[data-count="2"] .finish,
 .band[data-count="3"] .finish,
-.band[data-count="4"] .finish {
+.band[data-count="4"] .finish,
+.band[data-count="5"] .finish {
   flex-direction: column;
   justify-content: flex-start;
   gap: .4vh;
@@ -156,6 +169,8 @@ body.idle { cursor: none; }
 .band[data-count="3"] .finish-time { font-size: calc(min(6.8vw, 13vh) * var(--fit)); }
 .band[data-count="4"] .finish-label { font-size: calc(min(1.9vw, 3.8vh) * var(--fit)); }
 .band[data-count="4"] .finish-time { font-size: calc(min(5.2vw, 11vh) * var(--fit)); }
+.band[data-count="5"] .finish-label { font-size: calc(min(1.6vw, 3.4vh) * var(--fit)); }
+.band[data-count="5"] .finish-time { font-size: calc(min(4.2vw, 9.5vh) * var(--fit)); }
 
 /* Portrait screens and phones */
 @media (max-aspect-ratio: 1/1) {
@@ -174,6 +189,7 @@ body.idle { cursor: none; }
   .band[data-count] .finish-time { font-size: calc(13vw * var(--fit)); }
   .headings h1 { font-size: calc(9vw * var(--fit-head)); }
   .headings p { font-size: calc(5.6vw * var(--fit-head)); }
+  .meta { font-size: calc(4.2vw * var(--fit-head)); }
   .now-label { font-size: calc(5vw * var(--fit)); }
 }
 
@@ -205,6 +221,7 @@ body.analogue .dial { display: block; width: 100%; height: 100%; min-height: 0; 
   body.analogue .now { grid-column: 2; grid-row: 1 / -1; width: calc(min(96vh, 54vw) + 4vw); }
   body.analogue .headings h1 { font-size: calc(min(3.8vw, 8vh) * var(--fit-head)); }
   body.analogue .headings p { font-size: calc(min(2.5vw, 4.8vh) * var(--fit-head)); }
+  body.analogue .meta { font-size: calc(min(1.9vw, 3.6vh) * var(--fit-head)); }
   body.analogue .band[data-count] .finish {
     flex-direction: row;
     align-items: baseline;
@@ -302,7 +319,10 @@ button:focus-visible, input:focus-visible {
 .row-hint, .row-result { grid-column: 1 / -1; margin: 0; font-weight: 700; }
 .length-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .help { margin: 0; line-height: 1.35; color: var(--muted); }
-#standardEditor .row-edit { padding-bottom: 0; border-bottom: 0; }
+#standardEditor .row-edit, .row-edit.start-edit { padding-bottom: 0; border-bottom: 0; }
+.row-edit .start-action { justify-self: stretch; min-height: 44px; border-width: 2px; font-weight: 700; }
+.row-edit .start-action[hidden] { display: none; }
+.field input[readonly] { background: transparent; border-style: dashed; }
 #rowEditors:empty { display: none; }
 .add-buttons { display: grid; gap: 10px; }
 .add-buttons button[hidden] { display: none; }
@@ -322,6 +342,11 @@ legend { padding: 0 0 6px; font-weight: 500; }
   <header class="headings">
     <h1 id="showHeading"></h1>
     <p id="showSubheading"></p>
+    <div class="meta" id="showMeta">
+      <span id="showDate"></span>
+      <span id="showCentre"></span>
+      <span id="showTotal"></span>
+    </div>
   </header>
 
   <section class="now" aria-label="Current time">
@@ -330,10 +355,11 @@ legend { padding: 0 0 6px; font-weight: 500; }
     <svg class="dial" id="dial" viewBox="0 0 1000 1000" role="img" aria-label="Analogue clock"></svg>
   </section>
 
-  <section class="band" id="band" aria-label="Finish times"></section>
+  <section class="band" id="band" aria-label="Start and finish times"></section>
 </main>
 
 <div class="controls" id="controls">
+  <button type="button" id="startBarBtn">Start exam now</button>
   <button type="button" id="fullscreenBtn">Full screen</button>
   <button type="button" id="editBtn">Edit display</button>
 </div>
@@ -353,18 +379,19 @@ legend { padding: 0 0 6px; font-weight: 500; }
     <label class="field" for="subheading">Subheading
       <input id="subheading" type="text" autocomplete="off">
     </label>
+    <label class="field" for="centreNumber">Centre number
+      <input id="centreNumber" type="text" maxlength="20" autocomplete="off">
+    </label>
     <label class="field" for="clockLabel">Clock heading
       <input id="clockLabel" type="text" autocomplete="off">
+    </label>
+    <label class="check" for="showDateBox">
+      <input id="showDateBox" type="checkbox"> Show today's date
     </label>
   </div>
 
   <div class="group">
-    <h3>Standard finish time</h3>
-    <div id="standardEditor"></div>
-  </div>
-
-  <div class="group">
-    <h3>Extra finish times</h3>
+    <h3>Exam timing</h3>
     <fieldset>
       <legend>Exam length</legend>
       <div class="length-fields">
@@ -375,7 +402,29 @@ legend { padding: 0 0 6px; font-weight: 500; }
           <input id="durationMinutes" type="text" inputmode="numeric" maxlength="3" autocomplete="off">
         </label>
       </div>
+      <label class="check" for="showTotalTime">
+        <input id="showTotalTime" type="checkbox"> Show total exam time
+      </label>
+      <p class="help" id="totalHint" hidden>Enter the exam length to show the total exam time.</p>
     </fieldset>
+    <div class="row-edit start-edit">
+      <label class="field" for="startLabel">Heading
+        <input id="startLabel" type="text" autocomplete="off">
+      </label>
+      <label class="field" for="startTime">Start time
+        <input id="startTime" type="text" inputmode="numeric" maxlength="5" placeholder="09:00" autocomplete="off">
+      </label>
+      <p class="row-hint" id="startHint" hidden>Enter a 24-hour time, such as 09:00.</p>
+      <button type="button" class="start-action" id="startNowBtn">Start exam now</button>
+      <button type="button" class="start-action" id="clearStartBtn" hidden>Clear start time</button>
+    </div>
+    <p class="help">Start exam now rounds up to the next whole minute.</p>
+    <div id="standardEditor"></div>
+    <p class="help" id="finishHelp" hidden></p>
+  </div>
+
+  <div class="group">
+    <h3>Extra finish times</h3>
     <div class="group" id="rowEditors"></div>
     <div class="add-buttons">
       <button type="button" id="addExtraBtn">Add extra time finish</button>
@@ -408,14 +457,20 @@ legend { padding: 0 0 6px; font-weight: 500; }
 
 <script>
 (function () {
-  var STORE_KEY = "exam-hall-clock-v2";
+  var STORE_KEY = "exam-hall-clock-v3";
   var MAX_ROWS = 4;
   var nextId = 1;
 
   var defaults = {
     heading: "Computer Science",
     subheading: "Mock Exam",
-    clockLabel: "Current time",
+    centre: "",
+    showTotal: false,
+    showDate: true,
+    startLabel: "Start Time",
+    startTime: "",
+    startDate: "",
+    clockLabel: "",
     showSeconds: true,
     display: "light",
     clockStyle: "digital",
@@ -424,6 +479,14 @@ legend { padding: 0 0 6px; font-weight: 500; }
   };
 
   function $(id) { return document.getElementById(id); }
+
+  function dayKey(date) {
+    return date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
+  }
+
+  function dateText(date) {
+    return date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).replace(",", "");
+  }
 
   function validPercent(value) {
     var number = Number(value);
@@ -435,10 +498,17 @@ legend { padding: 0 0 6px; font-weight: 500; }
     try {
       var saved = JSON.parse(localStorage.getItem(STORE_KEY));
       if (saved && typeof saved === "object") {
-        ["heading", "subheading", "clockLabel"].forEach(function (key) {
+        ["heading", "subheading", "centre", "clockLabel", "startLabel"].forEach(function (key) {
           if (typeof saved[key] === "string") state[key] = saved[key];
         });
         if (typeof saved.showSeconds === "boolean") state.showSeconds = saved.showSeconds;
+        if (typeof saved.showTotal === "boolean") state.showTotal = saved.showTotal;
+        if (typeof saved.showDate === "boolean") state.showDate = saved.showDate;
+        /* A start time only counts on the day it was recorded */
+        if (saved.startDate === dayKey(new Date()) && parseTime(String(saved.startTime || ""))) {
+          state.startTime = parseTime(String(saved.startTime));
+          state.startDate = saved.startDate;
+        }
         if (saved.display === "dark" || saved.display === "light") state.display = saved.display;
         if (saved.clockStyle === "analogue") state.clockStyle = "analogue";
         state.duration = Number.isInteger(saved.duration) && saved.duration > 0 ? saved.duration : null;
@@ -466,6 +536,12 @@ legend { padding: 0 0 6px; font-weight: 500; }
       localStorage.setItem(STORE_KEY, JSON.stringify({
         heading: state.heading,
         subheading: state.subheading,
+        centre: state.centre,
+        showTotal: state.showTotal,
+        showDate: state.showDate,
+        startLabel: state.startLabel,
+        startTime: state.startTime,
+        startDate: state.startDate,
         clockLabel: state.clockLabel,
         showSeconds: state.showSeconds,
         display: state.display,
@@ -560,6 +636,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
   function tick() {
     var now = new Date();
     setDial(now);
+    if (state.showDate && $("showDate").textContent !== dateText(now)) $("showDate").textContent = dateText(now);
     setDigits($("hhmm"), pad(now.getHours()) + ":" + pad(now.getMinutes()));
     setDigits($("ss"), pad(now.getSeconds()));
     setTimeout(tick, 1000 - now.getMilliseconds() + 5);
@@ -599,11 +676,25 @@ legend { padding: 0 0 6px; font-weight: 500; }
     }
   }
 
+  function formatDuration(total) {
+    var hours = Math.floor(total / 60), minutes = total % 60, parts = [];
+    if (hours) parts.push(hours + (hours === 1 ? " hour" : " hours"));
+    if (minutes) parts.push(minutes + (minutes === 1 ? " minute" : " minutes"));
+    return parts.join(" ");
+  }
+
   function render() {
     document.documentElement.dataset.display = state.display;
     setText($("showHeading"), state.heading);
     setText($("showSubheading"), state.subheading);
     setText($("showClockLabel"), state.clockLabel);
+    var centre = state.centre.trim();
+    var total = state.showTotal && state.duration;
+    setText($("showDate"), state.showDate ? dateText(new Date()) : "");
+    setText($("showCentre"), centre ? "Centre number: " + centre : "");
+    setText($("showTotal"), total ? "Total exam time: " + formatDuration(state.duration) : "");
+    $("showMeta").hidden = !state.showDate && !centre && !total;
+    $("totalHint").hidden = !state.showTotal || !!state.duration;
     $("clock").classList.toggle("no-seconds", !state.showSeconds);
     document.body.classList.toggle("analogue", state.clockStyle === "analogue");
     hands.label.textContent = state.clockLabel;
@@ -611,9 +702,10 @@ legend { padding: 0 0 6px; font-weight: 500; }
 
     var band = $("band");
     band.textContent = "";
-    band.dataset.count = state.rows.length;
-    band.style.setProperty("--rows", state.rows.length);
-    state.rows.forEach(function (row) {
+    var items = state.startTime ? [{ label: state.startLabel, time: state.startTime }].concat(state.rows) : state.rows;
+    band.dataset.count = items.length;
+    band.style.setProperty("--rows", items.length);
+    items.forEach(function (row) {
       var item = document.createElement("div");
       item.className = "finish";
       var label = document.createElement("span");
@@ -638,6 +730,23 @@ legend { padding: 0 0 6px; font-weight: 500; }
   /* Extra time = exam length x percentage, rounded up to a whole minute,
      added to the standard finish time in the first row */
   function recalc() {
+    var worked = !!(state.startTime && state.duration);
+    if (worked) state.rows[0].time = addMinutes(state.startTime, state.duration);
+    var finishInput = document.querySelector('#standardEditor input[id^="rowTime"]');
+    if (finishInput) {
+      finishInput.readOnly = worked;
+      if (worked) finishInput.value = state.rows[0].time;
+    }
+    var help = $("finishHelp");
+    help.hidden = !state.startTime;
+    help.textContent = worked
+      ? "Finish time is worked out from the start time and exam length."
+      : "Enter the exam length to work out the finish time.";
+    var started = !!state.startTime;
+    $("startBarBtn").hidden = started;
+    $("startNowBtn").hidden = started;
+    $("clearStartBtn").hidden = !started;
+
     var base = state.rows[0].time;
     state.rows.forEach(function (row) {
       if (!row.calc) return;
@@ -761,7 +870,61 @@ legend { padding: 0 0 6px; font-weight: 500; }
   }
   bindText("heading", "heading");
   bindText("subheading", "subheading");
+  bindText("centreNumber", "centre");
   bindText("clockLabel", "clockLabel");
+  bindText("startLabel", "startLabel");
+
+  $("showDateBox").checked = state.showDate;
+  $("showDateBox").addEventListener("change", function (e) {
+    state.showDate = e.target.checked;
+    changed();
+  });
+
+  /* Start exam now: part minutes round up so candidates never lose time */
+  function startExam() {
+    var now = new Date();
+    var minutes = now.getHours() * 60 + now.getMinutes() + (now.getSeconds() > 0 ? 1 : 0);
+    minutes = minutes % 1440;
+    state.startTime = pad(Math.floor(minutes / 60)) + ":" + pad(minutes % 60);
+    state.startDate = dayKey(now);
+    $("startTime").value = state.startTime;
+    $("startHint").hidden = true;
+    changed();
+    if (!state.duration) showNotice("Start time recorded. Enter the exam length to work out the finish time.");
+  }
+  $("startBarBtn").addEventListener("click", function () {
+    startExam();
+    $("editBtn").focus();
+  });
+  $("startNowBtn").addEventListener("click", function () {
+    startExam();
+    $("clearStartBtn").focus();
+  });
+  $("clearStartBtn").addEventListener("click", function () {
+    state.startTime = "";
+    state.startDate = "";
+    $("startTime").value = "";
+    changed();
+    $("startNowBtn").focus();
+  });
+  $("startTime").value = state.startTime;
+  $("startTime").addEventListener("input", function (e) {
+    state.startTime = parseTime(e.target.value);
+    state.startDate = state.startTime ? dayKey(new Date()) : "";
+    changed();
+  });
+  $("startTime").addEventListener("blur", function (e) {
+    if (state.startTime) e.target.value = state.startTime;
+    var bad = !!e.target.value.trim() && !state.startTime;
+    $("startHint").hidden = !bad;
+    e.target.setAttribute("aria-invalid", bad ? "true" : "false");
+  });
+
+  $("showTotalTime").checked = state.showTotal;
+  $("showTotalTime").addEventListener("change", function (e) {
+    state.showTotal = e.target.checked;
+    changed();
+  });
 
   $("showSeconds").checked = state.showSeconds;
   $("showSeconds").addEventListener("change", function (e) {
