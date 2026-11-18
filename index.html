@@ -324,6 +324,13 @@ button:focus-visible, input:focus-visible {
 .row-edit .start-action[hidden] { display: none; }
 .field input[readonly] { background: transparent; border-style: dashed; }
 #rowEditors:empty { display: none; }
+.section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.info-btn { width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: 50%; font-size: 17px; font-weight: 800; line-height: 1; }
+.info-btn[aria-expanded="true"] { background: var(--ink); color: var(--page); }
+.info { display: grid; gap: 10px; margin: 0; padding: 12px; border: 2px solid var(--line); border-radius: 6px; font-size: 13px; line-height: 1.35; }
+.info[hidden] { display: none; }
+.info dt { font-weight: 800; }
+.info dd { margin: 2px 0 0; }
 .add-buttons { display: grid; gap: 10px; }
 .add-buttons button[hidden] { display: none; }
 .row-hint[hidden] { display: none; }
@@ -423,7 +430,24 @@ legend { padding: 0 0 6px; font-weight: 500; }
   </div>
 
   <div class="group">
-    <h3>Extra finish times</h3>
+    <div class="section-title">
+      <h3>Extra finish times</h3>
+      <button type="button" class="info-btn" id="infoBtn" aria-expanded="false" aria-controls="infoPanel" aria-label="Help with rest breaks, disruption and several exams">i</button>
+    </div>
+    <dl class="info" id="infoPanel" hidden>
+      <div>
+        <dt>Rest breaks</dt>
+        <dd>Use Add custom finish time and type in the candidate's finish time.</dd>
+      </div>
+      <div>
+        <dt>Disruption</dt>
+        <dd>Choose Clear start time and type in the new finish time. Extra time finishes update automatically, but the start time no longer shows on screen.</dd>
+      </div>
+      <div>
+        <dt>Several exams in one room</dt>
+        <dd>Use Add custom finish time for each exam, with the subject as its heading. You can show up to four finish times.</dd>
+      </div>
+    </dl>
     <div class="group" id="rowEditors"></div>
     <div class="add-buttons">
       <button type="button" id="addExtraBtn">Add extra time finish</button>
@@ -978,6 +1002,12 @@ legend { padding: 0 0 6px; font-weight: 500; }
   $("durationHours").addEventListener("input", readDuration);
   $("durationMinutes").addEventListener("input", readDuration);
   showDuration();
+
+  $("infoBtn").addEventListener("click", function () {
+    var open = $("infoPanel").hidden;
+    $("infoPanel").hidden = !open;
+    $("infoBtn").setAttribute("aria-expanded", open ? "true" : "false");
+  });
 
   /* Edit panel */
   function openPanel() {
