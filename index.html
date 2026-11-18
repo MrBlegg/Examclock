@@ -318,7 +318,7 @@ button:focus-visible, input:focus-visible {
 }
 .row-hint, .row-result { grid-column: 1 / -1; margin: 0; font-weight: 700; }
 .length-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.help { margin: 0; line-height: 1.35; color: var(--muted); }
+.help { margin: 0; font-size: 13px; line-height: 1.35; color: var(--muted); }
 #standardEditor .row-edit, .row-edit.start-edit { padding-bottom: 0; border-bottom: 0; }
 .row-edit .start-action { justify-self: stretch; min-height: 44px; border-width: 2px; font-weight: 700; }
 .row-edit .start-action[hidden] { display: none; }
@@ -359,7 +359,6 @@ legend { padding: 0 0 6px; font-weight: 500; }
 </main>
 
 <div class="controls" id="controls">
-  <button type="button" id="startBarBtn">Start exam now</button>
   <button type="button" id="fullscreenBtn">Full screen</button>
   <button type="button" id="editBtn">Edit display</button>
 </div>
@@ -418,7 +417,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
       <button type="button" class="start-action" id="startNowBtn">Start exam now</button>
       <button type="button" class="start-action" id="clearStartBtn" hidden>Clear start time</button>
     </div>
-    <p class="help">Start exam now rounds up to the next whole minute.</p>
+    <p class="help">Enter a start time and the finish time will be calculated automatically from the exam length. Alternatively, press Start exam now, which rounds up to the next whole minute. Leave the start time blank to enter the finish time manually below.</p>
     <div id="standardEditor"></div>
     <p class="help" id="finishHelp" hidden></p>
   </div>
@@ -743,7 +742,6 @@ legend { padding: 0 0 6px; font-weight: 500; }
       ? "Finish time is worked out from the start time and exam length."
       : "Enter the exam length to work out the finish time.";
     var started = !!state.startTime;
-    $("startBarBtn").hidden = started;
     $("startNowBtn").hidden = started;
     $("clearStartBtn").hidden = !started;
 
@@ -890,12 +888,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
     $("startTime").value = state.startTime;
     $("startHint").hidden = true;
     changed();
-    if (!state.duration) showNotice("Start time recorded. Enter the exam length to work out the finish time.");
   }
-  $("startBarBtn").addEventListener("click", function () {
-    startExam();
-    $("editBtn").focus();
-  });
   $("startNowBtn").addEventListener("click", function () {
     startExam();
     $("clearStartBtn").focus();
