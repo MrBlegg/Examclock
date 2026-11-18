@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Exam Hall Clock</title>
+<title>Exam Clock</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -253,7 +253,13 @@ button:focus-visible, input:focus-visible {
   padding-bottom: 14px;
   border-bottom: 2px solid var(--line);
 }
-.row-hint { grid-column: 1 / -1; margin: 0; font-weight: 700; }
+.row-hint, .row-result { grid-column: 1 / -1; margin: 0; font-weight: 700; }
+.length-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.help { margin: 0; line-height: 1.35; color: var(--muted); }
+#standardEditor .row-edit { padding-bottom: 0; border-bottom: 0; }
+#rowEditors:empty { display: none; }
+.add-buttons { display: grid; gap: 10px; }
+.add-buttons button[hidden] { display: none; }
 .row-hint[hidden] { display: none; }
 .field input[aria-invalid="true"] { border-color: #c62828; }
 .row-edit button { grid-column: 1 / -1; justify-self: start; min-height: 40px; border-width: 1px; font-weight: 500; }
@@ -306,9 +312,29 @@ legend { padding: 0 0 6px; font-weight: 500; }
   </div>
 
   <div class="group">
-    <h3>Finish times</h3>
+    <h3>Standard finish time</h3>
+    <div id="standardEditor"></div>
+  </div>
+
+  <div class="group">
+    <h3>Extra finish times</h3>
+    <fieldset>
+      <legend>Exam length</legend>
+      <div class="length-fields">
+        <label class="field" for="durationHours">Hours
+          <input id="durationHours" type="text" inputmode="numeric" maxlength="2" autocomplete="off">
+        </label>
+        <label class="field" for="durationMinutes">Minutes
+          <input id="durationMinutes" type="text" inputmode="numeric" maxlength="3" autocomplete="off">
+        </label>
+      </div>
+    </fieldset>
     <div class="group" id="rowEditors"></div>
-    <button type="button" id="addRowBtn">Add another finish time</button>
+    <div class="add-buttons">
+      <button type="button" id="addExtraBtn">Add extra time finish</button>
+      <button type="button" id="addRowBtn">Add custom finish time</button>
+    </div>
+    <p class="help">Extra time is rounded up to the next whole minute.</p>
   </div>
 
   <div class="group">
@@ -328,20 +354,26 @@ legend { padding: 0 0 6px; font-weight: 500; }
 
 <script>
 (function () {
-  var STORE_KEY = "exam-hall-clock-v1";
+  var STORE_KEY = "exam-hall-clock-v2";
   var MAX_ROWS = 4;
   var nextId = 1;
 
   var defaults = {
-    heading: "A Level Computer Science",
-    subheading: "November Mock Year 1",
+    heading: "Computer Science",
+    subheading: "Mock Exam",
     clockLabel: "Current time",
     showSeconds: true,
     display: "light",
-    rows: [{ label: "Finish time", time: "10:30" }]
+    duration: 90,
+    rows: [{ label: "Finish Time", time: "10:30" }]
   };
 
   function $(id) { return document.getElementById(id); }
+
+  function validPercent(value) {
+    var number = Number(value);
+    return Number.isInteger(number) && number >= 1 && number <= 100 ? number : null;
+  }
 
   function load() {
     var state = JSON.parse(JSON.stringify(defaults));
@@ -353,9 +385,16 @@ legend { padding: 0 0 6px; font-weight: 500; }
         });
         if (typeof saved.showSeconds === "boolean") state.showSeconds = saved.showSeconds;
         if (saved.display === "dark" || saved.display === "light") state.display = saved.display;
+        state.duration = Number.isInteger(saved.duration) && saved.duration > 0 ? saved.duration : null;
         if (Array.isArray(saved.rows) && saved.rows.length) {
-          state.rows = saved.rows.slice(0, MAX_ROWS).map(function (row) {
-            return { label: String(row.label || ""), time: String(row.time || "") };
+          state.rows = saved.rows.slice(0, MAX_ROWS).map(function (row, index) {
+            return {
+              label: String(row.label || ""),
+              time: String(row.time || ""),
+              calc: index > 0 && row.calc === true,
+              pct: validPercent(row.pct),
+              autoLabel: row.autoLabel === true
+            };
           });
         }
       }
@@ -374,7 +413,10 @@ legend { padding: 0 0 6px; font-weight: 500; }
         clockLabel: state.clockLabel,
         showSeconds: state.showSeconds,
         display: state.display,
-        rows: state.rows.map(function (row) { return { label: row.label, time: row.time }; })
+        duration: state.duration,
+        rows: state.rows.map(function (row) {
+          return { label: row.label, time: row.time, calc: !!row.calc, pct: row.pct, autoLabel: !!row.autoLabel };
+        })
       }));
     } catch (err) { /* The display still works without saving */ }
   }
@@ -465,75 +507,129 @@ legend { padding: 0 0 6px; font-weight: 500; }
     fit();
   }
 
-  function changed() { save(); render(); }
+  function addMinutes(time, minutes) {
+    var parts = time.split(":");
+    var total = (Number(parts[0]) * 60 + Number(parts[1]) + minutes) % 1440;
+    return pad(Math.floor(total / 60)) + ":" + pad(total % 60);
+  }
+
+  /* Extra time = exam length x percentage, rounded up to a whole minute,
+     added to the standard finish time in the first row */
+  function recalc() {
+    var base = state.rows[0].time;
+    state.rows.forEach(function (row) {
+      if (!row.calc) return;
+      var message;
+      row.time = "";
+      if (!row.pct) {
+        message = "Enter a percentage from 1 to 100.";
+      } else if (!state.duration) {
+        message = "Enter the exam length above.";
+      } else if (!base) {
+        message = "Enter the standard finish time above.";
+      } else {
+        var extra = Math.ceil(state.duration * row.pct / 100);
+        row.time = addMinutes(base, extra);
+        message = "Finishes at " + row.time + " (+" + extra + " min)";
+      }
+      var result = $("rowResult" + row.id);
+      if (result) result.textContent = message;
+    });
+  }
+
+  function changed() { recalc(); save(); render(); }
+
+  function makeField(id, text, input) {
+    var field = document.createElement("label");
+    field.className = "field";
+    field.htmlFor = id;
+    field.textContent = text;
+    input.id = id;
+    input.type = "text";
+    input.autocomplete = "off";
+    field.appendChild(input);
+    return field;
+  }
 
   function buildRowEditors() {
-    var holder = $("rowEditors");
-    holder.textContent = "";
+    $("standardEditor").textContent = "";
+    $("rowEditors").textContent = "";
     state.rows.forEach(function (row, index) {
       var wrap = document.createElement("div");
       wrap.className = "row-edit";
 
-      var labelField = document.createElement("label");
-      labelField.className = "field";
-      labelField.htmlFor = "rowLabel" + row.id;
-      labelField.textContent = "Heading";
       var labelInput = document.createElement("input");
-      labelInput.id = "rowLabel" + row.id;
-      labelInput.type = "text";
-      labelInput.autocomplete = "off";
+      var labelField = makeField("rowLabel" + row.id, "Heading", labelInput);
       labelInput.value = row.label;
-      labelInput.addEventListener("input", function () { row.label = labelInput.value; changed(); });
-      labelField.appendChild(labelInput);
-
-      var timeField = document.createElement("label");
-      timeField.className = "field";
-      timeField.htmlFor = "rowTime" + row.id;
-      timeField.textContent = "Time";
-      var timeInput = document.createElement("input");
-      timeInput.id = "rowTime" + row.id;
-      timeInput.type = "text";
-      timeInput.inputMode = "numeric";
-      timeInput.autocomplete = "off";
-      timeInput.maxLength = 5;
-      timeInput.placeholder = "14:30";
-      timeInput.value = row.time;
-      timeField.appendChild(timeInput);
-
-      var hint = document.createElement("p");
-      hint.className = "row-hint";
-      hint.id = "rowHint" + row.id;
-      hint.textContent = "Enter a 24-hour time, such as 14:30.";
-      hint.hidden = true;
-      timeInput.setAttribute("aria-describedby", hint.id);
-
-      timeInput.addEventListener("input", function () { row.time = parseTime(timeInput.value); changed(); });
-      timeInput.addEventListener("blur", function () {
-        if (row.time) timeInput.value = row.time;
-        var bad = !row.time;
-        hint.hidden = !bad;
-        timeInput.setAttribute("aria-invalid", bad ? "true" : "false");
+      labelInput.addEventListener("input", function () {
+        row.label = labelInput.value;
+        row.autoLabel = false;
+        changed();
       });
-
       wrap.appendChild(labelField);
-      wrap.appendChild(timeField);
-      wrap.appendChild(hint);
 
-      if (state.rows.length > 1) {
+      if (row.calc) {
+        var pctInput = document.createElement("input");
+        wrap.appendChild(makeField("rowPct" + row.id, "Extra time %", pctInput));
+        pctInput.inputMode = "numeric";
+        pctInput.maxLength = 3;
+        pctInput.value = row.pct || "";
+        pctInput.addEventListener("input", function () {
+          row.pct = validPercent(pctInput.value.trim() || "x");
+          pctInput.setAttribute("aria-invalid", row.pct ? "false" : "true");
+          if (row.autoLabel && row.pct) {
+            row.label = row.pct + "% extra time";
+            labelInput.value = row.label;
+          }
+          changed();
+        });
+        var result = document.createElement("p");
+        result.className = "row-result";
+        result.id = "rowResult" + row.id;
+        result.setAttribute("role", "status");
+        wrap.appendChild(result);
+      } else {
+        var timeInput = document.createElement("input");
+        wrap.appendChild(makeField("rowTime" + row.id, "Time", timeInput));
+        timeInput.inputMode = "numeric";
+        timeInput.maxLength = 5;
+        timeInput.placeholder = "14:30";
+        timeInput.value = row.time;
+
+        var hint = document.createElement("p");
+        hint.className = "row-hint";
+        hint.id = "rowHint" + row.id;
+        hint.textContent = "Enter a 24-hour time, such as 14:30.";
+        hint.hidden = true;
+        timeInput.setAttribute("aria-describedby", hint.id);
+        wrap.appendChild(hint);
+
+        timeInput.addEventListener("input", function () { row.time = parseTime(timeInput.value); changed(); });
+        timeInput.addEventListener("blur", function () {
+          if (row.time) timeInput.value = row.time;
+          var bad = !row.time;
+          hint.hidden = !bad;
+          timeInput.setAttribute("aria-invalid", bad ? "true" : "false");
+        });
+      }
+
+      if (index > 0) {
         var remove = document.createElement("button");
         remove.type = "button";
-        remove.textContent = "Remove finish time " + (index + 1);
+        remove.textContent = row.calc ? "Remove extra time" : "Remove finish time";
         remove.addEventListener("click", function () {
           state.rows.splice(index, 1);
           buildRowEditors();
           changed();
-          $("addRowBtn").focus();
+          $("addExtraBtn").focus();
         });
         wrap.appendChild(remove);
       }
-      holder.appendChild(wrap);
+      $(index === 0 ? "standardEditor" : "rowEditors").appendChild(wrap);
     });
-    $("addRowBtn").hidden = state.rows.length >= MAX_ROWS;
+    var full = state.rows.length >= MAX_ROWS;
+    $("addExtraBtn").hidden = full;
+    $("addRowBtn").hidden = full;
   }
 
   function bindText(id, key) {
@@ -557,16 +653,47 @@ legend { padding: 0 0 6px; font-weight: 500; }
     radio.addEventListener("change", function (e) { state.display = e.target.value; changed(); });
   });
 
-  $("addRowBtn").addEventListener("click", function () {
+  function focusLastRow(selector) {
+    var inputs = $("rowEditors").querySelectorAll(selector);
+    var input = inputs[inputs.length - 1];
+    input.focus();
+    input.select();
+  }
+
+  $("addExtraBtn").addEventListener("click", function () {
     if (state.rows.length >= MAX_ROWS) return;
-    var last = state.rows[state.rows.length - 1];
-    state.rows.push({ id: nextId++, label: "Extra time finish", time: last ? last.time : "" });
+    var used = state.rows.map(function (row) { return row.calc ? row.pct : null; });
+    var pct = [25, 50, 10].filter(function (value) { return used.indexOf(value) === -1; })[0] || 25;
+    state.rows.push({ id: nextId++, label: pct + "% extra time", time: "", calc: true, pct: pct, autoLabel: true });
     buildRowEditors();
     changed();
-    var inputs = $("rowEditors").querySelectorAll('input[type="text"]');
-    inputs[inputs.length - 1].focus();
-    inputs[inputs.length - 1].select();
+    focusLastRow('input[id^="rowPct"]');
   });
+
+  $("addRowBtn").addEventListener("click", function () {
+    if (state.rows.length >= MAX_ROWS) return;
+    state.rows.push({ id: nextId++, label: "Finish Time", time: state.rows[0].time, calc: false, pct: null, autoLabel: false });
+    buildRowEditors();
+    changed();
+    focusLastRow('input[id^="rowLabel"]');
+  });
+
+  function showDuration() {
+    var total = state.duration;
+    $("durationHours").value = total ? Math.floor(total / 60) : "";
+    $("durationMinutes").value = total ? total % 60 : "";
+  }
+  function readDuration() {
+    var hours = $("durationHours").value.trim();
+    var minutes = $("durationMinutes").value.trim();
+    var valid = /^\d*$/.test(hours) && /^\d*$/.test(minutes);
+    var total = valid ? Number(hours || 0) * 60 + Number(minutes || 0) : 0;
+    state.duration = total > 0 ? total : null;
+    changed();
+  }
+  $("durationHours").addEventListener("input", readDuration);
+  $("durationMinutes").addEventListener("input", readDuration);
+  showDuration();
 
   /* Edit panel */
   function openPanel() {
@@ -642,6 +769,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
 
   buildRowEditors();
+  recalc();
   tick();
   render();
   wake();
