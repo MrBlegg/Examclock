@@ -451,7 +451,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
       </div>
       <div>
         <dt>Disruption</dt>
-        <dd>Choose Clear start time and type in the new finish time. Extra time finishes update automatically, but the start time no longer shows on screen.</dd>
+        <dd>Type the new time into the standard finish time. The start time stays on screen, and extra time finishes update automatically.</dd>
       </div>
       <div>
         <dt>Several exams in one room</dt>
@@ -495,7 +495,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
 
   var THEMES = [
     { id: "franklin", name: "Default", scheme: "light", page: "#f2f1f4", ink: "#202b50", muted: "#444c6e", band: "#202b50", onBand: "#ffffff", line: "#cfcfd8", field: "#ffffff", second: "#e5117c", edge: "#e5117c", seconds: "#e5117c" },
-    { id: "dark", name: "Dark", scheme: "dark", page: "#202b50", ink: "#ffffff", muted: "#d9dcea", band: "#f2f1f4", onBand: "#202b50", line: "#4a5478", field: "#2a3660", second: "#ffffff", edge: "#e5117c", seconds: "#ffffff" },
+    { id: "dark", name: "Dark", scheme: "dark", page: "#202b50", ink: "#ffffff", muted: "#d9dcea", band: "#202b50", onBand: "#ffffff", line: "#4a5478", field: "#2a3660", second: "#ffffff", edge: "#e5117c", seconds: "#ffffff" },
     { id: "midnight", name: "Racing green", scheme: "dark", page: "#002a1a", ink: "#f6f8f1", muted: "#d2e2d6", band: "#f2c14e", onBand: "#002a1a", line: "#2a5a43", field: "#0a3a27", second: "#f2c14e" },
     { id: "ocean", name: "Ocean", scheme: "light", page: "#e9f6f7", ink: "#08323c", muted: "#2c5561", band: "#0b5566", onBand: "#ffffff", line: "#b4d3d8", field: "#ffffff", second: "#b3261e" },
     { id: "forest", name: "Forest", scheme: "light", page: "#eef6ee", ink: "#10331f", muted: "#31573f", band: "#17502e", onBand: "#ffffff", line: "#bcd4c1", field: "#ffffff", second: "#b3261e" },
@@ -527,20 +527,21 @@ legend { padding: 0 0 6px; font-weight: 500; }
   }
 
   var defaults = {
-    heading: "Computer Science",
-    subheading: "Mock Exam",
+    heading: "Subject name",
+    subheading: "Component",
     centre: "",
     showTotal: false,
     showDate: true,
     startLabel: "Start Time",
     startTime: "",
     startDate: "",
+    finishOverride: false,
     clockLabel: "",
     showSeconds: true,
     display: "franklin",
     clockStyle: "digital",
     duration: 90,
-    rows: [{ label: "Finish Time", time: "10:30" }]
+    rows: [{ label: "Finish Time", time: "" }]
   };
 
   function $(id) { return document.getElementById(id); }
@@ -573,6 +574,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
         if (saved.startDate === dayKey(new Date()) && parseTime(String(saved.startTime || ""))) {
           state.startTime = parseTime(String(saved.startTime));
           state.startDate = saved.startDate;
+          state.finishOverride = saved.finishOverride === true;
         }
         if (findTheme(saved.display)) state.display = saved.display;
         if (saved.clockStyle === "analogue") state.clockStyle = "analogue";
@@ -607,6 +609,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
         startLabel: state.startLabel,
         startTime: state.startTime,
         startDate: state.startDate,
+        finishOverride: state.finishOverride,
         clockLabel: state.clockLabel,
         showSeconds: state.showSeconds,
         display: state.display,
@@ -796,18 +799,19 @@ legend { padding: 0 0 6px; font-weight: 500; }
   /* Extra time = exam length x percentage, rounded up to a whole minute,
      added to the standard finish time in the first row */
   function recalc() {
-    var worked = !!(state.startTime && state.duration);
+    var worked = !!(state.startTime && state.duration && !state.finishOverride);
     if (worked) state.rows[0].time = addMinutes(state.startTime, state.duration);
     var finishInput = document.querySelector('#standardEditor input[id^="rowTime"]');
     if (finishInput) {
-      finishInput.readOnly = worked;
       if (worked) finishInput.value = state.rows[0].time;
     }
     var help = $("finishHelp");
     help.hidden = !state.startTime;
-    help.textContent = worked
-      ? "Finish time is worked out from the start time and exam length."
-      : "Enter the exam length to work out the finish time.";
+    help.textContent = state.finishOverride
+      ? "You typed this finish time, so it no longer updates from the start time and exam length. Type the start time again, or press Clear start time, to go back."
+      : worked
+        ? "Finish time is worked out from the start time and exam length. Type a different finish time to adjust it, for example after a disruption."
+        : "Enter the exam length to work out the finish time.";
     var started = !!state.startTime;
     $("startNowBtn").hidden = started;
     $("clearStartBtn").hidden = !started;
@@ -900,8 +904,26 @@ legend { padding: 0 0 6px; font-weight: 500; }
         timeInput.setAttribute("aria-describedby", hint.id);
         wrap.appendChild(hint);
 
-        timeInput.addEventListener("input", function () { row.time = parseTime(timeInput.value); changed(); });
+        timeInput.addEventListener("input", function () {
+          var typed = parseTime(timeInput.value);
+          /* Overriding a worked-out finish: wait for a full time so the board never shows a blank */
+          if (index === 0 && state.startTime) {
+            var complete = /^\s*(\d{4}|\d{1,2}[:.]\d{2})\s*$/.test(timeInput.value);
+            if (!complete || !typed || typed === row.time) return;
+            overrideFinish(typed);
+            return;
+          }
+          row.time = typed;
+          changed();
+        });
+        function overrideFinish(typed) {
+          state.finishOverride = true;
+          row.time = typed;
+          changed();
+        }
         timeInput.addEventListener("blur", function () {
+          var typed = parseTime(timeInput.value);
+          if (index === 0 && state.startTime && typed && typed !== row.time) overrideFinish(typed);
           if (row.time) timeInput.value = row.time;
           var bad = !row.time;
           hint.hidden = !bad;
@@ -952,6 +974,7 @@ legend { padding: 0 0 6px; font-weight: 500; }
     minutes = minutes % 1440;
     state.startTime = pad(Math.floor(minutes / 60)) + ":" + pad(minutes % 60);
     state.startDate = dayKey(now);
+    state.finishOverride = false;
     $("startTime").value = state.startTime;
     $("startHint").hidden = true;
     changed();
@@ -960,16 +983,26 @@ legend { padding: 0 0 6px; font-weight: 500; }
     startExam();
     $("clearStartBtn").focus();
   });
+  function resetFinish() {
+    state.rows[0].time = "";
+    var finishInput = document.querySelector('#standardEditor input[id^="rowTime"]');
+    if (finishInput) finishInput.value = "";
+  }
   $("clearStartBtn").addEventListener("click", function () {
     state.startTime = "";
     state.startDate = "";
     $("startTime").value = "";
+    state.finishOverride = false;
+    resetFinish();
     changed();
     $("startNowBtn").focus();
   });
   $("startTime").value = state.startTime;
   $("startTime").addEventListener("input", function (e) {
+    var had = !!state.startTime;
     state.startTime = parseTime(e.target.value);
+    state.finishOverride = false;
+    if (had && !state.startTime) resetFinish();
     state.startDate = state.startTime ? dayKey(new Date()) : "";
     changed();
   });
